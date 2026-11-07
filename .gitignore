@@ -6,3 +6,4 @@ notebooks/churn_by_contract.png
 *.zip
 *.twbr
 Tableau Driver/*.jar
+AGENTS.md

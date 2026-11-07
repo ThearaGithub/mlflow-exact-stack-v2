@@ -86,9 +86,9 @@ To open it on another machine:
 2. Copy `Tableau Driver\dremio-jdbc-driver-26.0.5.jar` into
    `%USERPROFILE%\Documents\My Tableau Repository\Drivers` and restart Tableau
    if it was already open. Tableau does not ship the Dremio driver.
-   > GitHub repo note: the 48 MB Dremio JDBC jar is not committed. Download
-   > Dremio JDBC 26.0.5 and place it in `Tableau Driver\` first; the ZIP package
-   > includes it.
+   > The ZIP includes the 48 MB driver jar; the GitHub repo does not commit it.
+   > If you cloned the repo, download Dremio JDBC 26.0.5 into `Tableau Driver\`
+   > first.
 3. Start the full stack, open the workbook, and enter the password chosen for
    the Dremio `admin` user when prompted. Dremio must be running.
 4. Open the **Churn Dashboard** tab. The proof screenshot is
@@ -288,7 +288,7 @@ MLflow Exact Stack V2/
 ├── state/ingest_summary.json   commit hashes + row counts from the last ingestion
 ├── assets/                     logos + Tableau_Churn_Dashboard.png proof
 ├── Tableau_Churn_Dashboard.twb live churn dashboard (Dremio -> Tableau)
-├── Tableau Driver/             driver download instructions (jar not committed)
+├── Tableau Driver/             Dremio JDBC driver for the workbook
 ├── Start Demo.bat              the single launcher: full stack + Dremio
 ├── Reset Demo.bat              wipe all Docker volumes
 ├── START HERE.md               the one-page guide for everyone
