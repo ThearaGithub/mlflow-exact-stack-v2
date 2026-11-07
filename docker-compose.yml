@@ -1,0 +1,166 @@
+name: lakehouse-exact
+
+# The exact stack from the professor's drawing:
+#   Sources -> ingestion -> S3 data lake (Parquet + Iceberg + Nessie catalog)
+#   Dremio -> dashboards        (optional profile; runs here with a 6 GB WSL cap)
+#   Spark  -> Jupyter notebooks (this compose file)
+#   MLflow is the added model-lifecycle layer.
+
+services:
+  # ------------------------------------------------------------------ S3
+  minio:
+    # MinIO RELEASE.2026-10-23, pinned by digest for reproducible builds.
+    image: cgr.dev/chainguard/minio@sha256:73297936408b731668ca0e835ac9add1a35cb6026a125c2f0cd476d9ef48222c
+    # The Chainguard image runs as uid 65532; root keeps the named volume simple.
+    user: "0:0"
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"       # S3 API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"   # object browser
+    volumes:
+      - minio-data:/data
+    restart: unless-stopped
+
+  # Creates the two buckets once MinIO answers. Safe to re-run.
+  minio-init:
+    image: amazon/aws-cli@sha256:c8156a0e74e13929a42d7e60f0d4e14e7d28d980cd21822505d4bff80e5460c1
+    depends_on:
+      - minio
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until aws --endpoint-url http://minio:9000 s3 ls >/dev/null 2>&1; do
+          echo "waiting for MinIO..."
+          sleep 2
+        done
+        aws --endpoint-url http://minio:9000 s3 mb s3://warehouse --region us-east-1 || true
+        aws --endpoint-url http://minio:9000 s3 mb s3://mlflow --region us-east-1 || true
+        echo "buckets ready: warehouse, mlflow"
+    restart: "no"
+
+  # -------------------------------------------------------------- Catalog
+  nessie:
+    image: ghcr.io/projectnessie/nessie:0.109.0
+    user: "0:0"
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      # Persist catalog commits in RocksDB (survives a container restart).
+      NESSIE_VERSION_STORE_TYPE: ROCKSDB
+      NESSIE_VERSION_STORE_PERSIST_ROCKS_DATABASE_PATH: /nessie/data
+      NESSIE_VERSION_STORE_PERSIST_CACHE_CAPACITY_MB: "32"
+      JAVA_OPTS_APPEND: -Xmx512m
+      # The warehouse Nessie manages: an S3 path, served through the REST catalog.
+      # Nessie's secret references use dotted property names, matching the
+      # official projectnessie compose example.
+      nessie.catalog.default-warehouse: warehouse
+      nessie.catalog.warehouses.warehouse.location: s3://warehouse/
+      nessie.catalog.service.s3.default-options.region: us-east-1
+      nessie.catalog.service.s3.default-options.path-style-access: "true"
+      nessie.catalog.service.s3.default-options.access-key: urn:nessie-secret:quarkus:nessie.catalog.secrets.access-key
+      nessie.catalog.secrets.access-key.name: ${MINIO_ROOT_USER:-minioadmin}
+      nessie.catalog.secrets.access-key.secret: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      nessie.catalog.service.s3.default-options.endpoint: http://minio:9000/
+      nessie.catalog.service.s3.default-options.external-endpoint: http://minio:9000/
+    ports:
+      - "${NESSIE_PORT:-19120}:19120"
+    volumes:
+      - nessie-data:/nessie/data
+    restart: unless-stopped
+
+  # --------------------------------------------------------------- MLflow
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      MLFLOW_S3_IGNORE_TLS: "true"
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_DEFAULT_REGION: us-east-1
+    command:
+      - mlflow
+      - server
+      - --host=0.0.0.0
+      - --port=5000
+      - --backend-store-uri=sqlite:////mlflow/mlflow.db
+      - --artifacts-destination=s3://mlflow
+      - --serve-artifacts
+      - --workers=1
+      - --allowed-hosts=localhost,127.0.0.1,mlflow,spark,localhost:5000,127.0.0.1:5000,mlflow:5000,spark:5000
+    ports:
+      - "${MLFLOW_PORT:-5000}:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 24
+      start_period: 20s
+    restart: unless-stopped
+
+  # ----------------------------------------------- Spark compute + Jupyter
+  spark:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    depends_on:
+      nessie:
+        condition: service_started
+      mlflow:
+        condition: service_healthy
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      GIT_PYTHON_REFRESH: quiet
+      PYSPARK_PYTHON: python3
+      PYSPARK_DRIVER_PYTHON: python3
+    ports:
+      - "${JUPYTER_PORT:-8888}:8888"
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    command:
+      - bash
+      - -lc
+      - >-
+        jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+        --ServerApp.root_dir=/workspace
+        --ServerApp.token= --ServerApp.password=
+    restart: unless-stopped
+
+  # ------------------------------------------------- Optional: Dremio / BI
+  # Not started by default. Needs a 6 GB WSL cap and a pre-pulled image
+  # (pulling at the old 7.4 GiB cap froze the host). Dremio refuses < 4 GB heap.
+  #   docker compose --profile dremio up -d dremio
+  # Then add a Nessie source in Dremio at http://nessie:19120/api/v2.
+  dremio:
+    profiles: ["dremio"]
+    image: dremio/dremio-oss:26.0.5
+    ports:
+      - "9047:9047"     # Dremio UI
+      - "31010:31010"   # ODBC/JDBC
+      - "32010:32010"   # Arrow flight
+    environment:
+      DREMIO_MAX_MEMORY_SIZE_MB: "${DREMIO_MAX_MEMORY_SIZE_MB:-4096}"
+    volumes:
+      - dremio-data:/opt/dremio/data
+    restart: unless-stopped
+
+volumes:
+  minio-data:
+  nessie-data:
+  mlflow-data:
+  dremio-data:

@@ -1,0 +1,28 @@
+FROM apache/spark:3.5.9-scala2.12-java17-python3-ubuntu
+
+USER root
+
+ARG ICEBERG_VERSION=1.11.0
+
+# Iceberg runtime for Spark 3.5 + the AWS bundle used by Nessie's S3FileIO.
+ADD https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-3.5_2.12/${ICEBERG_VERSION}/iceberg-spark-runtime-3.5_2.12-${ICEBERG_VERSION}.jar /opt/spark/jars/
+ADD https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-aws-bundle/${ICEBERG_VERSION}/iceberg-aws-bundle-${ICEBERG_VERSION}.jar /opt/spark/jars/
+
+ENV PATH=/opt/spark/bin:${PATH}
+ENV PYSPARK_PYTHON=python3
+ENV PYSPARK_DRIVER_PYTHON=python3
+
+RUN python3 -m pip install --no-cache-dir --upgrade pip && \
+    python3 -m pip install --no-cache-dir \
+        "jupyterlab>=4.4,<5" \
+        "pandas==2.2.3" \
+        "scikit-learn==1.6.1" \
+        "matplotlib==3.10.0" \
+        "mlflow==3.17.2" \
+        "findspark==2.0.1"
+
+COPY conf/spark-defaults.conf /opt/spark/conf/spark-defaults.conf
+
+WORKDIR /workspace
+
+EXPOSE 8888
