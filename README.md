@@ -85,10 +85,9 @@ To open it on another machine:
    sharing are not used.
 2. Copy `Tableau Driver\dremio-jdbc-driver-26.0.5.jar` into
    `%USERPROFILE%\Documents\My Tableau Repository\Drivers` and restart Tableau
-   if it was already open. Tableau does not ship the Dremio driver.
-   > The ZIP includes the 48 MB driver jar; the GitHub repo does not commit it.
-   > If you cloned the repo, download Dremio JDBC 26.0.5 into `Tableau Driver\`
-   > first.
+   if it was already open. Tableau does not ship the Dremio driver. The
+   complete demo—including the 48 MB driver jar—is in both the ZIP and the
+   GitHub clone.
 3. Start the full stack, open the workbook, and enter the password chosen for
    the Dremio `admin` user when prompted. Dremio must be running.
 4. Open the **Churn Dashboard** tab. The proof screenshot is

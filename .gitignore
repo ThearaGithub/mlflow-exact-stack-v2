@@ -1,9 +1,5 @@
-state/
 __pycache__/
 .ipynb_checkpoints/
-notebooks/churn_by_contract.png
 ~*
 *.zip
 *.twbr
-Tableau Driver/*.jar
-AGENTS.md

@@ -1,0 +1,11 @@
+{
+  "table": "lakehouse.churn_features",
+  "batch_1": {
+    "commit": "93b6390f8e039259c0575cbeef1082115fcd37bd035d030728f55de7e334a7b6",
+    "rows": 2000
+  },
+  "batch_2": {
+    "commit": "1f03385b09b1bce0774ba2645a767521c4ef0044d779f619dcd67ec6ad46a11a",
+    "rows": 2500
+  }
+}
