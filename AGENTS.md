@@ -19,7 +19,7 @@ The active session runs from `C:\Theara\YEAR 3\SEMESTER 1\PP`, not from `PP\Data
 - Repository: <https://github.com/ThearaGithub/mlflow-exact-stack-v2>
 - Visibility: public
 - Branch: `main`
-- The repo contains the **complete V2 folder**: 30 files on `main`, including the Dremio JDBC jar, runtime state, generated chart, deck, script, explainer, workbook, and `AGENTS.md`. The open Vault branch adds `setup/vault_init.sh`, `setup/vault_fetch.sh`, `setup/minio_provision.sh` and `.gitattributes`, making 34 once merged.
+- The repo contains the **complete V2 folder**: 37 files on `main`, including the Dremio JDBC jar, runtime state, generated chart, both decks and their scripts, explainer, workbook, logos, `.github/workflows/telegram-commit.yml`, and `AGENTS.md`.
 - The repo is the source of truth for the V2 demo. Clone it with:
 
 ```bash
@@ -42,18 +42,31 @@ git clean -fd
 
 The public repo includes a third-party Dremio JDBC jar. The user explicitly accepted that for easy cloning; check its license before any further redistribution.
 
-### Pull requests (2026-11-27)
+### Pull requests (all merged, 2026-11-28)
+
+`main` is `10d952f`.
 
 | PR | Branch | Contents | State |
 |---|---|---|---|
-| #1 | `fix/launcher-ollama-probe` | non-blocking Ollama probe, notes, refreshed ingest state | **merged** 2026-11-26; `main` is `ba4c0a6` |
-| #2 | `feat/vault-minio-secrets` | dev-mode Vault, `vault-init`, the three consumers reading the rendered keys, `.gitattributes`, doc sync (8 files) | open, 1 commit, `mergeable_state: clean` |
-| #3 | `fix/docker-desktop-path` | one probe line in `Start Demo.bat` for the per-user Docker Desktop install | open, 1 commit, 1 file (+1) |
+| #1 | `fix/launcher-ollama-probe` | non-blocking Ollama probe, notes, refreshed ingest state | **merged** 2026-11-26 (`ba4c0a6`) |
+| #2 | `feat/vault-minio-secrets` | dev-mode Vault, `vault-init`, three consumers reading the rendered keys, `.gitattributes`, doc sync | **merged** 2026-11-28 (`3704fef`) |
+| #3 | `fix/docker-desktop-path` | one probe line in `Start Demo.bat` for the per-user Docker Desktop install | **merged** 2026-11-28 (`ca96b74`) |
+| #4 | `feat/vault-service-identities` | AppRole identity per consumer, bucket-scoped MinIO users, the Vault-restart test, deck slide 6, doc sync (10 commits, 11 files, +612/-54) | **merged** 2026-11-28 (`149704b`) |
+| #5 | `docs/vault-week-summary` | `Vault_Week_Summary_Presentation.pptx`, `Vault_Week_Summary_Script.md`, three AGENTS.md lines (3 files, +279) | **merged** 2026-11-28 (`fdf81cb`) |
 
 - PRs come from the `Khannudomvirak` fork into `ThearaGithub/mlflow-exact-stack-v2` `main`. There is no `gh` CLI: PR bodies go through the REST API with a token taken from `git credential fill`.
-- Both open PRs branch from `ba4c0a6`, so neither needs a rebase until one merges. Merge #2 before #3 if both are wanted; #2 carries the doc sync.
-- Keep #3 to `Start Demo.bat` only. Docs about the new path go in a separate commit, never in #3.
-- #3 was verified by running the probe chain in real `cmd` (it resolves the per-user executable). A full `Start Demo.bat` run from that branch has **not** been done.
+- Every branch is now merged history and can be deleted once nobody needs to inspect it: `feat/vault-minio-secrets`, `fix/docker-desktop-path`, `docs/agents-pr-status`, `feat/vault-service-identities`, `docs/vault-week-summary`, plus `fix/launcher-ollama-probe`, which holds the stale pre-rebase duplicate `a2dc0a5`.
+- After #5, three commits went straight to `main` adding the Telegram notifier (below). They were not PRs.
+
+### Telegram notifier
+
+`.github/workflows/telegram-commit.yml` posts the head commit of every push to `main` into the team's Telegram group.
+
+- Needs two repository secrets: `TELEGRAM_BOT_TOKEN` (from @BotFather) and `TELEGRAM_CHAT_ID` (the group id, e.g. `-1001234567890`). If either is unset the job only prints a `::warning::` and exits 0, so a fork or a fresh clone never fails on it.
+- On a merge commit the push event credits whoever clicked Merge, so the first step asks `repos/:repo/commits/:sha/pulls` for the PR author and reports "<author>'s PR #N, merged by <actor>". Both logins are resolved to profile display names through `gh api users/<login>`, falling back to the login.
+- The message body is capped at 1,500 characters (Telegram allows 4,096) and the commit URL is appended.
+- It needs only `contents: read` and `pull-requests: read`: no write permission, no checkout.
+- The workflow is repo config, not part of the demo: nothing in the V2 runtime path depends on it, and the demo works with it deleted.
 
 ## One-sentence mental model
 
@@ -91,6 +104,7 @@ Vault issues each service its own identity and credentials; MinIO stores files; 
   - `Vault_Week_Summary_Script.md` — speaker script for that recap deck: 8 slides, 4:00, with Q&A answers.
   - `README.md` — technical reference.
   - `AGENTS.md` — this file.
+  - `.github/workflows/telegram-commit.yml` — posts every push to `main` into the team Telegram group.
 
 ## Data
 
@@ -168,7 +182,7 @@ Requirements: Docker Desktop with WSL2, about 10 GB free disk for images, and fr
 3. On a fresh machine or after a reset, open Jupyter and click **Run All** once to create the two MLflow runs and the `v1` champion.
 4. Dremio provisions itself on start (below); set up Tableau once.
 
-The launcher looks for Docker Desktop at `%ProgramFiles%\Docker\Docker\Docker Desktop.exe`, then `%LOCALAPPDATA%\Docker\Docker Desktop.exe`. A per-user install instead lands in `%LOCALAPPDATA%\Programs\DockerDesktop\Docker Desktop.exe`, so `main` reports that Docker Desktop was not found even though the engine works; PR #3 adds that middle probe. Until #3 merges, start Docker Desktop by hand before running the launcher.
+The launcher tries `%ProgramFiles%\Docker\Docker\Docker Desktop.exe`, then `%LOCALAPPDATA%\Docker\Docker Desktop.exe`, then `%LOCALAPPDATA%\Programs\DockerDesktop\Docker Desktop.exe` (the per-user install added by PR #3) before reporting that Docker Desktop was not found. The probe chain was verified in a real `cmd` window; a full `Start Demo.bat` run on a per-user install has still not been recorded.
 
 `Reset Demo.bat` wipes the nine Docker volumes: MinIO data, Nessie catalog, MLflow database, Dremio data, and the five Vault volumes (`approle-nessie`, `approle-mlflow`, `s3-creds-nessie`, `s3-creds-mlflow`, `s3seed`). A stack created before the per-service volumes can also leave an unused `vault-creds` volume behind; `down -v` removes it. Vault itself is in-memory, so it starts empty anyway. It does not delete host files.
 
@@ -433,12 +447,9 @@ Do not claim a fresh 16 GB machine or a clean-machine end-to-end run is verified
 
 ## Current state
 
-- Presentation: recorded and done.
-- Working directory: session moved to `C:\Theara\YEAR 3\SEMESTER 1\PP`; repo at `Data Lakehouse\MLflow Exact Stack V2`.
-- Local repo: `main` tracks `origin/main` at `ba4c0a6` (30 tracked files); a working checkout here sat 2 commits behind, so fast-forward before branching. Work sits on four branches off that tip: `feat/vault-minio-secrets` (PR #2, 32 files), `fix/docker-desktop-path` (PR #3, 1 file), `docs/agents-pr-status` (the PR/state notes, stacked on the Vault branch so it does not conflict with #2), and `feat/vault-service-identities` (`51f3d99` per-service AppRole identities, `3f39746` bucket-scoped MinIO users, `b813c59` state refresh, `3f9a526` keys that survive a Vault restart; 34 files, stacked on `docs/agents-pr-status`). `fix/launcher-ollama-probe` holds a stale pre-rebase duplicate of the Vault commit (`a2dc0a5`) and is safe to delete. `notebooks/lakehouse_mlflow.ipynb` (Run All outputs), `.env` and the session summaries stay local; `derby.log` and `metastore_db/` are Spark leftovers safe to delete.
-- Repo: public.
-- Stack: **running** as of 2026-11-27 after a `down`/`up` cycle: vault, minio, nessie, mlflow, spark and dremio up; `vault-init`, `minio-init`, `minio-provision`, `nessie-creds` and `mlflow-creds` exited 0; MLflow healthy. The daemon had been stopped earlier that day and was restarted by hand; on a reset machine, assume nothing runs until `Start Demo.bat` or Compose is run. Vault was then restarted on purpose to exercise the in-memory wipe: running services kept working and the following `up` re-seeded the same keys from `s3seed`.
-- ZIP: not present; the public repo is the complete clone source.
-- Autologin: Dremio provisioning **implemented and verified** 2026-11-23 (admin123 user, Nessie source, `.env` password, launcher step `[3b/5]`). Notebook auto-run and the landing page were rejected.
-- Vault: dev-mode container with **one identity per service** (policy + AppRole + fetch sidecar) and **one bucket-scoped MinIO user per service** (`nessie-svc`, `mlflow-svc`) **implemented and verified** 2026-11-27 (see "Vault" above). MinIO's own root login is still the bootstrap value in `.env`; token renewal, rotation and revocation stay the production story.
-- Stack state after the service-to-service work: all eleven compose services settled, MinIO holds exactly two non-root users (`nessie-svc` limited to `warehouse`, `mlflow-svc` limited to `mlflow`), Nessie main unchanged at `640214d2...`, MLflow at 4 runs with `churn_classifier@champion` = version 3 (run `aa456c61...`, ROC AUC 0.7995). Nine Docker volumes exist; `Reset Demo.bat` / `down -v` clears all of them. An audit the same day removed one stale `lakehouse-exact_vault-creds` volume left over from the earlier shared-file design, so the running stack now matches the documented nine.
+- Presentation: recorded and done. Two decks ship now: `MLflow_Exact_Stack_V2_Presentation.pptx` (8 slides, the graded one) and `Vault_Week_Summary_Presentation.pptx` (8 slides, ends on a Thank You slide) with `Vault_Week_Summary_Script.md` (4:00 across four speakers).
+- Local repo: `main` tracks `origin/main` at `10d952f`, 37 tracked files, clean; all five PRs merged 2026-11-26..28, so the Vault service-to-service work is on `main`.
+- Repo: public. ZIP: not present; the public repo is the complete clone source.
+- Autologin: only service-to-service. Every consumer signs itself in to Vault with its own AppRole. No human login is automated: Dremio's `admin123` account and Nessie source are created by the bootstrap, but the Dremio login screen is still typed once per session; MinIO shows its browser prompt; the Vault UI wants the root token; Jupyter, MLflow and Nessie have no auth at all.
+- Stack: **not necessarily running.** On 2026-11-28 the Docker containers on this laptop came from a different folder, `C:\Users\USER\Desktop\MLflow Exact Stack V2.1 - Copy\MLflow Exact Stack V2`, whose compose file predates Vault: six containers and four volumes, no `vault`, no `vault-init`, no `nessie-creds`/`mlflow-creds`, so `localhost:8200` does not answer. That is the old demo, not this repo's. Run Compose or `Start Demo.bat` from this folder to get the nine-volume Vault stack.
+- Local-only files: `notebooks/lakehouse_mlflow.ipynb` (Run All outputs), `.env`, the session summaries, `freebuff-chat-*.md`, `new.md` (transcript export). `derby.log` and `metastore_db/` are Spark leftovers safe to delete.
